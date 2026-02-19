@@ -3,12 +3,16 @@
 
 #include <a113/ucp/core.hpp>
 
+#include <esp_log.h>
+
 namespace fmp {
 
 struct env_snapshot_t {
     uint16_t   soil_moisture;
-    int16_t    temperature;
-    uint32_t   pressure;
+    float      temperature_1;
+    float      temperature_2;
+    float      pressure;
+    float      humidity;
 };
 
 };
