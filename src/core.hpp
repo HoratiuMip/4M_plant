@@ -3,9 +3,16 @@
 
 #include <a113/ucp/core.hpp>
 
+#include <freertos/FreeRTOS.h>
 #include <esp_log.h>
 
 namespace fmp {
+
+enum Priority_ : UBaseType_t {
+    Priority_1 = 0x1,
+    Priority_2 = 0x2,
+    Priority_3 = 0x3
+};
 
 struct env_snapshot_t {
     uint16_t   soil_moisture;

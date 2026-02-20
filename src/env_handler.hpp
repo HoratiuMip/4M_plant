@@ -2,6 +2,7 @@
 #define FMP_ENV_HANDLER_HPP
 
 #include "core.hpp"
+#include "bridge.hpp"
 
 #include <driver/i2c_master.h>
 
@@ -12,15 +13,15 @@
 #include <esp_adc/adc_oneshot.h>
 #include <esp_adc/adc_cali.h>
 
-#include <freertos/FreeRTOS.h>
-#include <freertos/ringbuf.h>
-
 namespace fmp {
 
 class Env_Handler {
 public:
     struct config_t {
-        uint8_t   soil_moisture_rounds   = 0;
+        uint8_t       soil_moisture_rounds   = 0;
+        uint32_t      main_task_stack        = 4096;    
+        UBaseType_t   main_task_priority     = configMAX_PRIORITIES - 1;
+        uint32_t      measure_period_ms      = 1000;
     };
 
 public:
@@ -96,11 +97,20 @@ public:
         _bmp280.bind_i2c( &_i2c_bmp280 );
         _bmp280.load_calibs();
 
+    /* Read task. */
+        xTaskCreate(
+            &Env_Handler::_main, "fmp::Env_Handler::_main", 
+            _config.main_task_stack, ( void* )this, _config.main_task_priority, 
+            &_h_main 
+        );
+
         return A113_OK;
     }
 
 protected:
     config_t                    _config         = {};
+
+    TaskHandle_t                _h_main         = NULL;
 
     adc_oneshot_unit_handle_t   _h_adc1         = NULL;
     adc_cali_handle_t           _h_adc1_2_cal   = NULL;
@@ -110,6 +120,20 @@ protected:
     a113::esp32::io::I2C_m2s    _i2c_bmp280     = {};
     a113::sdrv::AHT21           _aht21          = {};
     a113::sdrv::BMP280          _bmp280         = {};
+
+protected:
+    static void _main( void* arg_ ) { 
+        auto* self = ( Env_Handler* )arg_;    
+    for(;;) {
+        vTaskDelay( pdMS_TO_TICKS( self->_config.measure_period_ms ) );
+
+        env_snapshot_t ss;
+        self->_soil_moisture_read( &ss.soil_moisture );
+        self->_temp_hum_read( &ss.temperature_1, &ss.humidity );
+        self->_temp_press_read( &ss.temperature_2, &ss.pressure );
+
+        Bridge.commit_env_ss( ss );
+    } }
 
 protected:
     a113::status_t _soil_moisture_read( uint16_t* sm_ ) {
@@ -144,14 +168,6 @@ protected:
         vTaskDelay( pdMS_TO_TICKS( 10 ) );
         _bmp280.load_data( temp_, press_ );
         _bmp280.store_ctrl_meas( BMP280::CtrlMeas_Power_Low );
-        return A113_OK;
-    }
-
-public:
-    a113::status_t make_snapshot( env_snapshot_t* ss_ ) {
-        this->_soil_moisture_read( &ss_->soil_moisture );
-        this->_temp_hum_read( &ss_->temperature_1, &ss_->humidity );
-        this->_temp_press_read( &ss_->temperature_2, &ss_->pressure );
         return A113_OK;
     }
 
